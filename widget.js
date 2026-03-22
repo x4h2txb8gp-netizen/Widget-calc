@@ -1,5 +1,6 @@
 // ============================================
 // КАЛЬКУЛЯТОР ВЛАЖНОСТИ - УНИВЕРСАЛЬНЫЙ ВИДЖЕТ
+// Версия на основе ваших файлов (index.html, styles.css, script.js)
 // Вставьте на сайт: <script src="https://ваш-сайт.ru/widget.js"></script>
 // ============================================
 
@@ -7,7 +8,13 @@
   // ========== УНИКАЛЬНЫЙ ID ДЛЯ МУЛЬТИВСТАВКИ ==========
   const uid = 'widget_' + Math.random().toString(36).substr(2, 8);
   
-  // ========== КОНСТАНТЫ ==========
+  // ========== ОПРЕДЕЛЯЕМ БАЗОВЫЙ URL ДЛЯ ИКОНОК ==========
+  const scriptTag = document.currentScript;
+  const scriptSrc = scriptTag.src;
+  const baseUrl = scriptSrc.substring(0, scriptSrc.lastIndexOf('/') + 1);
+  const iconPath = baseUrl + 'icons/';
+  
+  // ========== КОНСТАНТЫ (из вашего script.js) ==========
   const Rv = 461.5;
   const MAGNUS_A = 6.112;
   const MAGNUS_B = 17.62;
@@ -18,7 +25,7 @@
   let prec = 5;
   let vals = { rh: "60", abs: "0.0138", mix: "10", dew: "10", temp: "25", press: "760" };
   
-  // ========== ФОРМУЛЫ ==========
+  // ========== ФОРМУЛЫ (из вашего script.js) ==========
   function es(T) { return MAGNUS_A * Math.exp((MAGNUS_B * T) / (MAGNUS_C + T)); }
   function absFromRH(RH, T) { let e_hPa = (RH / 100) * es(T); return (e_hPa * 100) / (Rv * (T + 273.15)); }
   function RHFromAbs(A, T) { let e_Pa = A * Rv * (T + 273.15); return ((e_Pa / 100) / es(T)) * 100; }
@@ -38,53 +45,23 @@
     return units[to] || '';
   }
   
-  // ========== ИЗМЕНЕНИЕ ТОЧНОСТИ ==========
+  function updateResultLabel(container, to) {
+    const labels = { 'RH': 'Относительная влажность', 'abs': 'Абсолютная влажность', 'mix': 'Влагосодержание', 'dew': 'Точка росы' };
+    const resLabel = container.querySelector('#' + uid + '_resLabel');
+    const resUnit = container.querySelector('#' + uid + '_resUnit');
+    if (resLabel) resLabel.innerHTML = labels[to] || 'Результат';
+    if (resUnit) resUnit.innerHTML = getUnit(to);
+  }
+  
   function changePrec(s) {
     prec += s;
     if (prec < 0) prec = 0;
     if (prec > 10) prec = 10;
     const precSpan = document.getElementById(uid + '_prec');
     if (precSpan) precSpan.innerText = prec;
-    autoSave();
   }
   
-  // ========== СОХРАНЕНИЕ ДАННЫХ (48 часов) ==========
-  const STORAGE_KEY = 'humidity_widget_' + uid;
-  const STORAGE_EXPIRY = 48 * 60 * 60 * 1000;
-  
-  function saveToLocalStorage() {
-    const dataToSave = {
-      vals: vals,
-      from: document.getElementById(uid + '_from')?.value || '',
-      to: document.getElementById(uid + '_to')?.value || '',
-      prec: prec,
-      timestamp: Date.now()
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-  }
-  
-  function loadFromLocalStorage() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return false;
-    try {
-      const data = JSON.parse(saved);
-      const age = Date.now() - data.timestamp;
-      if (age > STORAGE_EXPIRY) {
-        localStorage.removeItem(STORAGE_KEY);
-        return false;
-      }
-      if (data.vals) vals = data.vals;
-      if (data.prec !== undefined) prec = data.prec;
-      return true;
-    } catch(e) {
-      localStorage.removeItem(STORAGE_KEY);
-      return false;
-    }
-  }
-  
-  function autoSave() { saveToLocalStorage(); }
-  
-  // ========== UI ФУНКЦИИ ==========
+  // ========== UI ФУНКЦИИ (из вашего script.js) ==========
   function clearErr(container) {
     container.querySelectorAll('.input-group input').forEach(i => i.classList.remove('error'));
     container.querySelectorAll('.err-msg').forEach(e => e.remove());
@@ -99,7 +76,7 @@
       if (old) old.remove();
       let d = document.createElement('div');
       d.className = 'err-msg';
-      d.innerHTML = `<img src="icons/x-circle.svg" width="12" height="12" alt=""> <span>${msg}</span>`;
+      d.innerHTML = `<img src="${iconPath}x-circle.svg" width="12" height="12" alt=""> <span>${msg}</span>`;
       p.appendChild(d);
     }
   }
@@ -120,19 +97,17 @@
   function valMix(container) { return valNum(container, uid + '_mix', 0, 1000, 'Влагосодержание'); }
   function valDew(container) { return valNum(container, uid + '_dew', -100, 100, 'Точка росы'); }
   
-  function updateResultLabel(container, to) {
-    const labels = { 'RH': 'Относительная влажность', 'abs': 'Абсолютная влажность', 'mix': 'Влагосодержание', 'dew': 'Точка росы' };
-    const resLabel = container.querySelector('#' + uid + '_resLabel');
-    const resUnit = container.querySelector('#' + uid + '_resUnit');
-    if (resLabel) resLabel.innerHTML = labels[to] || 'Результат';
-    if (resUnit) resUnit.innerHTML = getUnit(to);
-  }
-  
   function updateDirectionHint(container) {
     let from = container.querySelector('#' + uid + '_from')?.value;
     let to = container.querySelector('#' + uid + '_to')?.value;
     let hint = container.querySelector('#' + uid + '_directionHint');
-    if (hint) hint.style.display = (from && to) ? 'none' : 'flex';
+    if (hint) {
+      if (from && to) {
+        hint.style.display = 'none';
+      } else {
+        hint.style.display = 'flex';
+      }
+    }
   }
   
   function validateDir(container) {
@@ -144,16 +119,16 @@
     updateDirectionHint(container);
     
     if (!from || !to) {
-      if (btn) { btn.disabled = true; btn.innerHTML = `<img src="icons/arrow-right.svg" width="16" height="16" alt=""> <span>Выберите направление</span>`; }
-      if (warn) { warn.style.display = 'flex'; warn.innerHTML = `<img src="icons/alert-triangle.svg" width="12" height="12" alt=""> <span>Выберите оба параметра</span>`; }
+      if (btn) { btn.disabled = true; btn.innerHTML = `<img src="${iconPath}arrow-right.svg" width="16" height="16" alt=""> <span>Выберите направление</span>`; }
+      if (warn) { warn.style.display = 'flex'; warn.innerHTML = `<img src="${iconPath}alert-triangle.svg" width="12" height="12" alt=""> <span>Выберите оба параметра</span>`; }
       return false;
     }
     if (from === to) {
-      if (btn) { btn.disabled = true; btn.innerHTML = `<img src="icons/slash.svg" width="16" height="16" alt=""> <span>Нельзя в себя</span>`; }
-      if (warn) { warn.style.display = 'flex'; warn.innerHTML = `<img src="icons/alert-triangle.svg" width="12" height="12" alt=""> <span>Нельзя пересчитывать саму величину</span>`; }
+      if (btn) { btn.disabled = true; btn.innerHTML = `<img src="${iconPath}slash.svg" width="16" height="16" alt=""> <span>Нельзя в себя</span>`; }
+      if (warn) { warn.style.display = 'flex'; warn.innerHTML = `<img src="${iconPath}alert-triangle.svg" width="12" height="12" alt=""> <span>Нельзя пересчитывать саму величину</span>`; }
       return false;
     }
-    if (btn) { btn.disabled = false; btn.innerHTML = `<img src="icons/flag.svg" width="16" height="16" alt=""> <span>Рассчитать</span>`; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `<img src="${iconPath}flag.svg" width="16" height="16" alt=""> <span>Рассчитать</span>`; }
     if (warn) warn.style.display = 'none';
     return true;
   }
@@ -202,19 +177,18 @@
     
     if (!from) { inputsDiv.innerHTML = ''; updateResultLabel(container, to); validateDir(container); return; }
     
-    let html = `<br><div class="input-group"><label><img src="icons/thermometer.svg" width="16" height="16" alt=""> Температура, °C</label><input type="number" id="${uid}_temp" value="${vals.temp}" step="0.1"></div>
-                <div class="input-group"><label><img src="icons/bar-chart-2.svg" width="16" height="16" alt=""> Давление, мм рт.ст.</label><input type="number" id="${uid}_press" value="${vals.press}" step="0.1"></div>`;
-    if (from === 'RH') html += `<div class="input-group"><label><img src="icons/droplet.svg" width="16" height="16" alt=""> Отн.влажность, %</label><input type="number" id="${uid}_rh" value="${vals.rh}" step="0.1"></div>`;
-    else if (from === 'abs') html += `<div class="input-group"><label><img src="icons/droplet.svg" width="16" height="16" alt=""> Абс.влажность, кг/м³</label><input type="number" id="${uid}_abs" value="${vals.abs}" step="0.0001"></div>`;
-    else if (from === 'mix') html += `<div class="input-group"><label><img src="icons/cloud.svg" width="16" height="16" alt=""> Влагосодержание, г/кг</label><input type="number" id="${uid}_mix" value="${vals.mix}" step="0.01"></div>`;
-    else if (from === 'dew') html += `<div class="input-group"><label><img src="icons/cloud-rain.svg" width="16" height="16" alt=""> Точка росы, °C</label><input type="number" id="${uid}_dew" value="${vals.dew}" step="0.1"></div>`;
+    let html = `<br><div class="input-group"><label><img src="${iconPath}thermometer.svg" width="16" height="16" alt=""> Температура, °C</label><input type="number" id="${uid}_temp" value="${vals.temp}" step="0.1"></div>
+                <div class="input-group"><label><img src="${iconPath}bar-chart-2.svg" width="16" height="16" alt=""> Давление, мм рт.ст.</label><input type="number" id="${uid}_press" value="${vals.press}" step="0.1"></div>`;
+    if (from === 'RH') html += `<div class="input-group"><label><img src="${iconPath}droplet.svg" width="16" height="16" alt=""> Отн.влажность, %</label><input type="number" id="${uid}_rh" value="${vals.rh}" step="0.1"></div>`;
+    else if (from === 'abs') html += `<div class="input-group"><label><img src="${iconPath}droplet.svg" width="16" height="16" alt=""> Абс.влажность, кг/м³</label><input type="number" id="${uid}_abs" value="${vals.abs}" step="0.0001"></div>`;
+    else if (from === 'mix') html += `<div class="input-group"><label><img src="${iconPath}cloud.svg" width="16" height="16" alt=""> Влагосодержание, г/кг</label><input type="number" id="${uid}_mix" value="${vals.mix}" step="0.01"></div>`;
+    else if (from === 'dew') html += `<div class="input-group"><label><img src="${iconPath}cloud-rain.svg" width="16" height="16" alt=""> Точка росы, °C</label><input type="number" id="${uid}_dew" value="${vals.dew}" step="0.1"></div>`;
     inputsDiv.innerHTML = html;
     
-    inputsDiv.querySelectorAll('input').forEach(i => { i.addEventListener('input', () => { clearErr(container); realCheck(container); autoSave(); }); });
+    inputsDiv.querySelectorAll('input').forEach(i => { i.addEventListener('input', () => { clearErr(container); realCheck(container); }); });
     realCheck(container);
     updateResultLabel(container, to);
     validateDir(container);
-    autoSave();
   }
   
   function calc(container) {
@@ -261,23 +235,17 @@
       if (span) span.innerText = res.toFixed(prec);
       const resUnit = container.querySelector('#' + uid + '_resUnit');
       if (resUnit) resUnit.innerHTML = getUnit(to);
-      autoSave();
     } catch (e) { alert(e.message); if (span) span.innerText = '—'; const resUnit = container.querySelector('#' + uid + '_resUnit'); if (resUnit) resUnit.innerHTML = ''; }
   }
   
-  // ========== ВСТАВКА ВИДЖЕТА НА СТРАНИЦУ ==========
+  // ========== СОЗДАНИЕ HTML СТРУКТУРЫ ==========
   const container = document.createElement('div');
   container.className = 'humidity-widget';
   
-  const scriptTag = document.currentScript;
+  // Вставляем контейнер перед скриптом
   scriptTag.parentNode.insertBefore(container, scriptTag);
   
-  // Определяем базовый URL для иконок
-  const scriptSrc = scriptTag.src;
-  const baseUrl = scriptSrc.substring(0, scriptSrc.lastIndexOf('/') + 1);
-  const iconPath = baseUrl + 'icons/';
-  
-  // HTML структура (с уникальными ID)
+  // HTML структура (все иконки используют iconPath)
   container.innerHTML = `
     <div class="card">
       <div class="head"><h2>Калькулятор влажности</h2></div>
@@ -324,7 +292,7 @@
     </div>
   `;
   
-  // ========== ПОДКЛЮЧЕНИЕ СТИЛЕЙ ==========
+  // ========== ПОДКЛЮЧЕНИЕ СТИЛЕЙ (из вашего styles.css) ==========
   const styleTag = document.createElement('style');
   styleTag.textContent = `
     .humidity-widget * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -355,6 +323,10 @@
     .humidity-widget select:invalid { color: #9aa6b5; }
     .humidity-widget select:valid { color: #2c3e50; }
     @media (max-width: 500px) { .humidity-widget { padding: 16px; } .humidity-widget .head { margin: -16px -16px 16px -16px; } .humidity-widget h2 { font-size: 1.2rem; } .humidity-widget .result-value { font-size: 1.5rem; padding: 8px 18px; } .humidity-widget .row { flex-direction: column; gap: 8px; } }
+    .humidity-widget img { vertical-align: middle; }
+    .humidity-widget .input-group label, .humidity-widget .info, .humidity-widget .warning, .humidity-widget .err-msg { display: flex; align-items: center; gap: 6px; }
+    .humidity-widget .btn, .humidity-widget .stepper button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+    .humidity-widget .input-group label img, .humidity-widget .info img, .humidity-widget .warning img, .humidity-widget .err-msg img, .humidity-widget .btn img, .humidity-widget .stepper button img { display: inline-block; }
   `;
   document.head.appendChild(styleTag);
   
@@ -374,18 +346,8 @@
   if (precPlus) precPlus.onclick = () => changePrec(1);
   if (calcBtn) calcBtn.onclick = calcHandler;
   
-  // ========== ЗАГРУЗКА СОХРАНЁННЫХ ДАННЫХ ==========
-  const hasSavedData = loadFromLocalStorage();
-  if (hasSavedData) {
-    if (fromSelect && vals.from !== undefined) fromSelect.value = vals.from;
-    if (toSelect && vals.to !== undefined) toSelect.value = vals.to;
-    update(container);
-    if (fromSelect?.value && toSelect?.value) {
-      if (calcBtn) calcBtn.disabled = false;
-    }
-  } else {
-    update(container);
-    if (calcBtn) calcBtn.disabled = true;
-  }
+  // ========== ИНИЦИАЛИЗАЦИЯ ==========
+  update(container);
+  if (calcBtn) calcBtn.disabled = true;
   updateDirectionHint(container);
 })();
